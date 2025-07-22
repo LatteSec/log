@@ -8,11 +8,15 @@ import (
 	"time"
 )
 
+type LogMessageMetaKV struct {
+	K, V string
+}
+
 type LogMessage struct {
-	Timestamp time.Time         // timestamp
-	Level     Level             // log level
-	Msg       string            // log message
-	Meta      map[string]string // log metadata
+	Timestamp time.Time          // timestamp
+	Level     Level              // log level
+	Msg       string             // log message
+	Meta      []LogMessageMetaKV // log metadata
 
 	trace  string // stack trace (optional)
 	caller string // caller (optional)
@@ -26,17 +30,17 @@ func NewLogMessage(level Level, msg string) *LogMessage {
 		Timestamp: time.Now().UTC(),
 		Level:     level,
 		Msg:       msg,
-		Meta:      make(map[string]string),
+		Meta:      make([]LogMessageMetaKV, 0, 1),
 	}
 }
 
 func (lm *LogMessage) WithMeta(key string, value any) *LogMessage {
-	lm.Meta[key] = fmt.Sprintf("%v", value)
+	lm.Meta = append(lm.Meta, LogMessageMetaKV{K: key, V: fmt.Sprintf("%v", value)})
 	return lm
 }
 
 func (lm *LogMessage) WithMetaf(key, format string, v ...any) *LogMessage {
-	lm.Meta[key] = fmt.Sprintf(format, v...)
+	lm.Meta = append(lm.Meta, LogMessageMetaKV{K: key, V: fmt.Sprintf(format, v...)})
 	return lm
 }
 
@@ -54,8 +58,8 @@ func (lm *LogMessage) String(loggerName string) string {
 	var metaStr string
 	if len(lm.Meta) > 0 {
 		meta := make([]string, 0, len(lm.Meta))
-		for k, v := range lm.Meta {
-			meta = append(meta, fmt.Sprintf("%s=%s", k, v))
+		for _, m := range lm.Meta {
+			meta = append(meta, fmt.Sprintf("%s=%s", m.K, m.V))
 		}
 		metaStr = fmt.Sprintf(" {%s}", strings.Join(meta, ", "))
 	}
