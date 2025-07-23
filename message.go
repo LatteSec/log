@@ -21,6 +21,8 @@ type LogMessage struct {
 	trace  string // stack trace (optional)
 	caller string // caller (optional)
 
+	loggerName string // used only in log handlers, meaningless otherwise
+
 	send func(*LogMessage)
 }
 
@@ -84,6 +86,10 @@ func (lm *LogMessage) String(loggerName string) string {
 	var debugStr string
 	if lm.trace != "" || lm.caller != "" {
 		debugStr = fmt.Sprintf("\n==== DEBUG ====\nCaller: %s\nTrace: %s", lm.caller, lm.trace) + "===== END =====\n\n"
+	}
+
+	if loggerName == "" {
+		loggerName = lm.loggerName
 	}
 
 	return strings.TrimSuffix(fmt.Sprintf("%s [%s] %s: %s%s%s",

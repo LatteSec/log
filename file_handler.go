@@ -105,7 +105,7 @@ func (f *FileHandler) Close() error {
 func (f *FileHandler) logWriter() {
 	f.muFile.Lock()
 	if f.logCh == nil {
-		f.logCh = make(chan string, 1<<10)
+		f.logCh = make(chan *LogMessage, 1<<10)
 	}
 	f.muFile.Unlock()
 
@@ -119,10 +119,12 @@ func (f *FileHandler) logWriter() {
 
 	for {
 		select {
-		case line := <-f.logCh:
+		case msg := <-f.logCh:
+			l := f.FormatLog(msg)
 			f.muFile.Lock()
-			_, err := f.filePtr.Load().WriteString(line)
+			_, err := f.filePtr.Load().WriteString(l)
 			f.muFile.Unlock()
+			releaseLogMessage(msg)
 
 			if err != nil {
 				Error().Msgf("failed to write to log file: %v", err).Send()

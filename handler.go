@@ -10,8 +10,8 @@ import (
 // Loggers use LogHandlers under the hood
 // to handle log messages
 type LogHandler interface {
-	Handle(loggerName string, msg *LogMessage)           // handles the log message
-	FormatLog(loggerName string, msg *LogMessage) string // formats the log message
+	Handle(loggerName string, msg *LogMessage) // handles the log message
+	FormatLog(msg *LogMessage) string          // formats the log message
 
 	Start() error    // starts the handler
 	Close() error    // closes the handler
@@ -22,8 +22,8 @@ type BaseHandler struct {
 	LogHandler
 }
 
-func (b *BaseHandler) FormatLog(loggerName string, msg *LogMessage) string {
-	return msg.String(loggerName)
+func (b *BaseHandler) FormatLog(msg *LogMessage) string {
+	return msg.String("")
 }
 
 type WriterHandler struct {
@@ -31,7 +31,7 @@ type WriterHandler struct {
 
 	wg      sync.WaitGroup
 	mu      sync.RWMutex
-	logCh   chan string
+	logCh   chan *LogMessage
 	closeCh chan struct{}
 
 	writer    io.Writer
@@ -44,7 +44,7 @@ func (w *WriterHandler) Handle(loggerName string, msg *LogMessage) {
 	}
 
 	select {
-	case w.logCh <- w.FormatLog(loggerName, msg):
+	case w.logCh <- acquireLogMessage(loggerName, msg):
 	default: // drop
 	}
 }
@@ -60,9 +60,9 @@ func (w *WriterHandler) Start() error {
 		w.writer = io.Discard
 	}
 
-	w.logCh = make(chan string, 1<<10)
+	w.logCh = make(chan *LogMessage, 1<<10)
 	w.closeCh = make(chan struct{})
-	w.cleanupId = registerCleanup(func() error { w.Close(); return nil })
+	w.cleanupId = registerCleanup(w.Close)
 
 	w.wg.Add(1)
 	go noPanicReRunVoid("log-handler", w.logWriter)
@@ -104,8 +104,9 @@ func (i *WriterHandler) IsRunning() bool {
 func (w *WriterHandler) logWriter() {
 	for {
 		select {
-		case line := <-w.logCh:
-			fmt.Fprint(w.writer, line)
+		case msg := <-w.logCh:
+			fmt.Fprint(w.writer, w.FormatLog(msg))
+			releaseLogMessage(msg)
 		case <-w.closeCh:
 			w.wg.Done()
 			return
