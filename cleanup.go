@@ -14,7 +14,7 @@ type cleanupFunc func() error
 var (
 	once sync.Once
 
-	mu           sync.Mutex
+	muCleanup    sync.Mutex
 	cleanupIdGen uint64
 	cleanupFns   = make(map[uint64]cleanupFunc)
 )
@@ -23,27 +23,27 @@ var (
 // that is called on exit
 func registerCleanup(fn cleanupFunc) uint64 {
 	id := atomic.AddUint64(&cleanupIdGen, 1)
-	mu.Lock()
+	muCleanup.Lock()
 	cleanupFns[id] = fn
-	mu.Unlock()
+	muCleanup.Unlock()
 	return id
 }
 
 func unregisterCleanup(id uint64) {
-	mu.Lock()
+	muCleanup.Lock()
 	delete(cleanupFns, id)
-	mu.Unlock()
+	muCleanup.Unlock()
 }
 
 func runCleanup() {
-	mu.Lock()
+	muCleanup.Lock()
 	fns := make([]cleanupFunc, 0, len(cleanupFns))
 	for _, fn := range cleanupFns {
 		fns = append(fns, fn)
 	}
 	cleanupFns = make(map[uint64]cleanupFunc)
 	atomic.StoreUint64(&cleanupIdGen, 0)
-	mu.Unlock()
+	muCleanup.Unlock()
 	for i, fn := range fns {
 		name := fmt.Sprintf("cleanup %d", i)
 		if err := noPanicRun(name, fn); err != nil {

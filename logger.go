@@ -38,7 +38,7 @@ type Logger struct {
 
 func (l *Logger) Start() error {
 	l.mu.Lock()
-	defer mu.Unlock()
+	defer l.mu.Unlock()
 
 	if l.running {
 		return ErrAlreadyStarted
