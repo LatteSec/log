@@ -38,6 +38,10 @@ type WriterHandler struct {
 	cleanupId uint64
 }
 
+func NewWriterHandler(writer io.Writer) *WriterHandler {
+	return &WriterHandler{writer: writer}
+}
+
 func (w *WriterHandler) Handle(loggerName string, msg *LogMessage) {
 	if !w.IsRunning() {
 		return
