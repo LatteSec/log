@@ -67,17 +67,18 @@ func main() {
   defer log.Close()
 
   // Use it straight away with a default logger
-  log.Info().Msg("Hello, World!")
-  log.Log(log.INFO).Msg("Hello, World!")
+  log.Info().Msg("Hello, World!").Send()
+  log.Log(log.INFO).Msg("Hello, World!").Send()
 
   // or create a logger
-  logger := log.NewLogger().
+  logger, _ := log.NewLogger().
               Name("my-logger").
-              Level(log.INFO)
+              Level(log.INFO).
+              Build()
 
-  logger.Start()
-  logger.Info().Msg("Hello from custom logger!")
-  logger.Log(log.INFO).Msg("Hello from custom logger!")
+  _ = logger.Start()
+  logger.Info().Msg("Hello from custom logger!").Send()
+  logger.Log(log.INFO).Msg("Hello from custom logger!").Send()
 
   // and you can register it to the global logger too!
   log.Register(logger)
