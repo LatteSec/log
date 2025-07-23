@@ -42,10 +42,6 @@ jobs:
 
             test-source:
               - *common
-              - cmd/**
-              - version/**
-              - internal/**
-              - pkg/**
               - go.*
               - '*.go'
 
@@ -79,7 +75,7 @@ jobs:
 
       - name: Lint
         run: |
-          make lint/go
+          make lint
 
       - name: Security
         continue-on-error: true
