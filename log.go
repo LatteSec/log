@@ -25,8 +25,11 @@ const (
 var (
 	levelNames = [6]string{"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "QUIET"}
 
-	DefaultLogger atomic.Pointer[Logger]
+	DefaultLogger        atomic.Pointer[Logger]
+	DefaultStdoutHandler atomic.Pointer[WriterHandler]
+	DefaultStderrHandler atomic.Pointer[WriterHandler]
 
+	ErrNotStarted                = errors.New("not started")
 	ErrAlreadyStarted            = errors.New("already started")
 	ErrInvalidLogLevel           = errors.New("invalid log level")
 	ErrMissingLogFilename        = errors.New("missing log filename")
@@ -36,48 +39,38 @@ var (
 
 func init() {
 	go handleSigint()
+
+	DefaultStdoutHandler.Store(&WriterHandler{writer: os.Stdout})
+	DefaultStderrHandler.Store(&WriterHandler{writer: os.Stderr})
 }
 
-func Log(msg *LogMessage) {
+func Register(l *Logger) {
+	DefaultLogger.Store(l)
+}
+
+func log(msg *LogMessage) {
 	logger := DefaultLogger.Load()
 	if logger == nil {
-		newLogger := NewLogger("default")
+		newLogger, _ := NewLogger().Name("default").Build()
 		if err := newLogger.Start(); err != nil {
 			panic(fmt.Errorf("could not start default logger: %v", err))
 		}
 
 		DefaultLogger.Store(newLogger)
 		logger = newLogger
-		logger.Log(NewLogMessage(INFO, "default logger started"))
+		logger.Info().Msg("default logger started").Send()
 	}
 
-	logger.Log(msg)
+	logger.SendLog(msg)
 }
 
-func log(level Level, msg string) {
-	Log(NewLogMessage(level, msg))
+func newGLobalLogMessage() *LogMessage {
+	return NewLogMessage().WithSend(log)
 }
 
-func Debug(v ...any) { log(DEBUG, fmt.Sprint(v...)) }
-func Info(v ...any)  { log(INFO, fmt.Sprint(v...)) }
-func Warn(v ...any)  { log(WARN, fmt.Sprint(v...)) }
-func Error(v ...any) { log(ERROR, fmt.Sprint(v...)) }
-func Fatal(v ...any) { log(ERROR, fmt.Sprint(v...)); os.Exit(1) }
-
-func Debugf(format string, v ...any) { log(DEBUG, fmt.Sprintf(format, v...)) }
-func Infof(format string, v ...any)  { log(INFO, fmt.Sprintf(format, v...)) }
-func Warnf(format string, v ...any)  { log(WARN, fmt.Sprintf(format, v...)) }
-func Errorf(format string, v ...any) { log(ERROR, fmt.Sprintf(format, v...)) }
-func Fatalf(format string, v ...any) {
-	log(ERROR, fmt.Sprintf(format, v...))
-	os.Exit(1)
-}
-
-func Debugln(v ...any) { log(DEBUG, fmt.Sprintln(v...)) }
-func Infoln(v ...any)  { log(INFO, fmt.Sprintln(v...)) }
-func Warnln(v ...any)  { log(WARN, fmt.Sprintln(v...)) }
-func Errorln(v ...any) { log(ERROR, fmt.Sprintln(v...)) }
-func Fatalln(v ...any) {
-	log(ERROR, fmt.Sprintln(v...))
-	os.Exit(1)
-}
+func Log(level Level) *LogMessage { return newGLobalLogMessage().WithLevel(level) }
+func Debug() *LogMessage          { return newGLobalLogMessage().Debug() }
+func Info() *LogMessage           { return newGLobalLogMessage().Info() }
+func Warn() *LogMessage           { return newGLobalLogMessage().Warn() }
+func Error() *LogMessage          { return newGLobalLogMessage().Error() }
+func Fatal() *LogMessage          { return newGLobalLogMessage().Fatal() }
