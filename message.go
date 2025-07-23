@@ -15,24 +15,27 @@ type LogMessageMetaKV struct {
 type LogMessage struct {
 	Timestamp time.Time          // timestamp
 	Level     Level              // log level
-	Msg       string             // log message
+	Message   string             // log message
 	Meta      []LogMessageMetaKV // log metadata
 
 	trace  string // stack trace (optional)
 	caller string // caller (optional)
+
+	send func(*LogMessage)
 }
 
 // NewLogMessage
 //
 // Creates a new LogMessage
-func NewLogMessage(level Level, msg string) *LogMessage {
+func NewLogMessage() *LogMessage {
 	return &LogMessage{
 		Timestamp: time.Now().UTC(),
-		Level:     level,
-		Msg:       msg,
 		Meta:      make([]LogMessageMetaKV, 0, 1),
 	}
 }
+
+func (lm *LogMessage) WithSend(send func(*LogMessage)) *LogMessage { lm.send = send; return lm }
+func (lm *LogMessage) Send()                                       { lm.send(lm) }
 
 func (lm *LogMessage) WithMeta(key string, value any) *LogMessage {
 	lm.Meta = append(lm.Meta, LogMessageMetaKV{K: key, V: fmt.Sprintf("%v", value)})
@@ -54,6 +57,20 @@ func (lm *LogMessage) WithCaller() *LogMessage {
 	return lm
 }
 
+func (lm *LogMessage) WithLevel(level Level) *LogMessage { lm.Level = level; return lm }
+
+func (lm *LogMessage) Msg(msg string) *LogMessage { lm.Message = msg; return lm }
+func (lm *LogMessage) Msgf(format string, v ...any) *LogMessage {
+	lm.Message = fmt.Sprintf(format, v...)
+	return lm
+}
+
+func (lm *LogMessage) Debug() *LogMessage { return lm.WithLevel(DEBUG) }
+func (lm *LogMessage) Info() *LogMessage  { return lm.WithLevel(INFO) }
+func (lm *LogMessage) Warn() *LogMessage  { return lm.WithLevel(WARN) }
+func (lm *LogMessage) Error() *LogMessage { return lm.WithLevel(ERROR) }
+func (lm *LogMessage) Fatal() *LogMessage { return lm.WithLevel(ERROR).WithCaller().WithTraceStack() }
+
 func (lm *LogMessage) String(loggerName string) string {
 	var metaStr string
 	if len(lm.Meta) > 0 {
@@ -73,7 +90,7 @@ func (lm *LogMessage) String(loggerName string) string {
 		lm.Timestamp.Format(time.RFC3339Nano),
 		levelNames[lm.Level],
 		loggerName,
-		strings.TrimSuffix(lm.Msg, "\n"),
+		strings.TrimSuffix(lm.Message, "\n"),
 		metaStr,
 		debugStr,
 	), "\n") + "\n"
