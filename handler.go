@@ -78,9 +78,10 @@ func (w *WriterHandler) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	var err error
 	if w.writer != os.Stdout && w.writer != os.Stderr {
 		if closer, ok := w.writer.(io.Closer); ok {
-			closer.Close()
+			err = closer.Close()
 		}
 	}
 
@@ -91,7 +92,7 @@ func (w *WriterHandler) Close() error {
 	w.logCh = nil
 	w.wg.Wait()
 
-	return nil
+	return err
 }
 
 func (i *WriterHandler) IsRunning() bool {

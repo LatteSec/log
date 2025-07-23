@@ -76,7 +76,7 @@ func (f *FileHandler) Start() error {
 	}
 
 	f.closeCh = make(chan struct{})
-	f.cleanupId = registerCleanup(func() error { f.Close(); return nil })
+	f.cleanupId = registerCleanup(f.Close)
 
 	f.wg.Add(2)
 	go noPanicReRunVoid(base+"-log-handler", f.logWriter)
