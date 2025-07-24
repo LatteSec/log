@@ -1,5 +1,7 @@
 package log
 
+import "io"
+
 type (
 	LoggerBuilder struct {
 		LoggerMeta
@@ -82,6 +84,11 @@ func (lb *LoggerBuilder) Name(name string) *LoggerBuilder { lb.name = name; retu
 func (lb *LoggerBuilder) WithFile(path string, maxLogFileSize int64) *LoggerBuilder {
 	lb.path = path
 	lb.maxLogFileSize = maxLogFileSize
+	return lb
+}
+
+func (lb *LoggerBuilder) WithWriter(wr io.Writer) *LoggerBuilder {
+	lb.handlers = append(lb.handlers, NewWriterHandler(wr))
 	return lb
 }
 
