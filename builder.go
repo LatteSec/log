@@ -3,7 +3,8 @@ package log
 type (
 	LoggerBuilder struct {
 		LoggerMeta
-		path string
+		path           string
+		maxLogFileSize int64 // set to 0 to disable rotations
 	}
 
 	LoggerMeta struct {
@@ -39,6 +40,18 @@ func (lb *LoggerBuilder) Build() (*Logger, error) {
 			return nil, err
 		}
 
+		switch lb.maxLogFileSize {
+		case 0:
+			fh.SetMaxFileSize(1 << 20)
+		case -1:
+			fh.SetMaxFileSize(0)
+		default:
+			if lb.maxLogFileSize < 0 {
+				return nil, ErrInvalidMaxFileSize
+			}
+		}
+		fh.SetMaxFileSize(lb.maxLogFileSize)
+
 		lb.handlers = append(lb.handlers, fh)
 		lb.path = ""
 	}
@@ -62,8 +75,15 @@ func (lb *LoggerBuilder) WithCleanup(fns ...func()) *LoggerBuilder {
 	return lb
 }
 
-func (lb *LoggerBuilder) Name(name string) *LoggerBuilder     { lb.name = name; return lb }
-func (lb *LoggerBuilder) WithFile(path string) *LoggerBuilder { lb.path = path; return lb }
+func (lb *LoggerBuilder) Name(name string) *LoggerBuilder { lb.name = name; return lb }
+
+// path is the path to the log file
+// maxLogFileSize is the maximum size of the log file in bytes before it is rotated (set to -1 to disable rotations)
+func (lb *LoggerBuilder) WithFile(path string, maxLogFileSize int64) *LoggerBuilder {
+	lb.path = path
+	lb.maxLogFileSize = maxLogFileSize
+	return lb
+}
 
 func (lb *LoggerBuilder) WithStdout(on bool) *LoggerBuilder { lb.stdoutEnabled = on; return lb }
 func (lb *LoggerBuilder) WithStderr(on bool) *LoggerBuilder { lb.stderrEnabled = on; return lb }
