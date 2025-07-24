@@ -46,7 +46,7 @@ func (l *Logger) Start() error {
 
 	l.running = true
 	for _, h := range l.handlers {
-		if err := h.Start(); err != nil {
+		if err := h.Start(); err != nil && err != ErrAlreadyStarted {
 			return err
 		}
 	}
@@ -93,6 +93,7 @@ func (l *Logger) Stderr(on bool)  { l.mu.Lock(); defer l.mu.Unlock(); l.stderrEn
 func (l *Logger) SendLog(msg *LogMessage) {
 	l.mu.RLock()
 	if msg.Level < l.level {
+		l.mu.RUnlock()
 		return
 	}
 

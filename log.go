@@ -31,7 +31,9 @@ var (
 
 	ErrNotStarted                = errors.New("not started")
 	ErrAlreadyStarted            = errors.New("already started")
+	ErrInvalidLogHandler         = errors.New("invalid log handler")
 	ErrInvalidLogLevel           = errors.New("invalid log level")
+	ErrInvalidMaxFileSize        = errors.New("invalid max file size")
 	ErrMissingLogFilename        = errors.New("missing log filename")
 	ErrNoLogFileConfigured       = errors.New("no log file configured")
 	ErrFoundDirWhenExpectingFile = errors.New("found directory when expecting file")
