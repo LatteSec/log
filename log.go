@@ -25,7 +25,7 @@ const (
 var (
 	levelNames = [6]string{"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "QUIET"}
 
-	DefaultLogger        atomic.Pointer[Logger]
+	defaultLogger        atomic.Pointer[Logger]
 	DefaultStdoutHandler atomic.Pointer[WriterHandler]
 	DefaultStderrHandler atomic.Pointer[WriterHandler]
 
@@ -46,24 +46,32 @@ func init() {
 	DefaultStderrHandler.Store(&WriterHandler{writer: os.Stderr})
 }
 
+func DefaultLogger() *Logger {
+	logger := defaultLogger.Load()
+	if logger != nil {
+		return logger
+	}
+
+	logger, err := NewLogger().Name("default").Build()
+	if err != nil {
+		panic(fmt.Errorf("could not build default logger: %v", err))
+	}
+	if err := logger.Start(); err != nil {
+		panic(fmt.Errorf("could not start default logger: %v", err))
+	}
+
+	defaultLogger.Store(logger)
+	logger.Info().Msg("default logger started").Send()
+
+	return logger
+}
+
 func Register(l *Logger) {
-	DefaultLogger.Store(l)
+	defaultLogger.Store(l)
 }
 
 func log(msg *LogMessage) {
-	logger := DefaultLogger.Load()
-	if logger == nil {
-		newLogger, _ := NewLogger().Name("default").Build()
-		if err := newLogger.Start(); err != nil {
-			panic(fmt.Errorf("could not start default logger: %v", err))
-		}
-
-		DefaultLogger.Store(newLogger)
-		logger = newLogger
-		logger.Info().Msg("default logger started").Send()
-	}
-
-	logger.SendLog(msg)
+	DefaultLogger().SendLog(msg)
 }
 
 func newGLobalLogMessage() *LogMessage {
