@@ -46,7 +46,7 @@ func (l *Logger) Start() error {
 
 	l.running = true
 	for _, h := range l.handlers {
-		if err := h.Start(); err != nil {
+		if err := h.Start(); err != nil && err != ErrAlreadyStarted {
 			return err
 		}
 	}
