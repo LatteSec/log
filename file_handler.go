@@ -3,6 +3,7 @@ package log
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -21,167 +22,174 @@ type refCountedFileHandler struct {
 	count   int32
 }
 
+// NewFileHandler creates a new FileHandler and starts it.
 func NewFileHandler(path string) (*FileHandler, error) {
-	val, _ := fileHandlers.LoadOrStore(path, &refCountedFileHandler{
-		handler: newFileHandler(path),
+	return newRefCounted(newFileHandler(path))
+}
+
+func newRefCounted(fh *FileHandler) (*FileHandler, error) {
+	newPth := filepath.Join(fh.logDir, fh.logFilename)
+	val, _ := fileHandlers.LoadOrStore(newPth, &refCountedFileHandler{
+		handler: fh,
 	})
 
+	var once sync.Once
+
 	rh := val.(*refCountedFileHandler)
-	rh.handler.release = func() {
+	rh.handler.release = func() bool {
 		if atomic.AddInt32(&rh.count, -1) == 0 {
-			fileHandlers.Delete(path)
+			once.Do(func() {
+				rh.handler.muFile.Lock()
+				defer rh.handler.muFile.Unlock()
+
+				rh.handler.running = false
+			})
+			return true
 		}
+
+		return false
+	}
+
+	var once2 sync.Once
+	rh.handler.onRelease = func() {
+		once2.Do(func() {
+			rh.handler.muFile.Lock()
+			defer rh.handler.muFile.Unlock()
+
+			ptr := rh.handler.filePtr
+			if ptr != nil {
+				_ = ptr.Sync()
+				_ = ptr.Close()
+				rh.handler.filePtr = nil
+			}
+
+			fileHandlers.Delete(newPth)
+		})
 	}
 
 	if atomic.AddInt32(&rh.count, 1) == 1 {
 		if err := rh.handler.Start(); err != nil && !errors.Is(err, ErrAlreadyStarted) {
-			fileHandlers.Delete(path)
+			fileHandlers.Delete(newPth)
 			return nil, err
 		}
 	}
+
 	return rh.handler, nil
 }
 
 type FileHandler struct {
-	WriterHandler
+	BaseHandler
 
-	muFile sync.RWMutex // covers filePtr and logCh
+	muFile sync.Mutex // covers filePtr and logCh
 
 	logDir      string
 	logFilename string
-	filePtr     atomic.Pointer[os.File]
+	filePtr     *os.File
 	maxFileSize int64 // exceeding this size will trigger log rotation. defaults to 10MB. set to 0 to disable
 
-	release func()
+	release   func() bool // returns true if the handler is no longer in use
+	onRelease func()
 }
 
 func newFileHandler(path string) *FileHandler {
-	return &FileHandler{
+	f := &FileHandler{
 		logDir:      filepath.Dir(path),
 		logFilename: filepath.Base(path),
 	}
-}
 
-func (f *FileHandler) Start() error {
-	_, base := f.GetLogfileLocation()
-	if base == "." {
-		return ErrMissingLogFilename
-	}
-
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if f.logCh != nil {
-		return ErrAlreadyStarted
-	}
-
-	f.closeCh = make(chan struct{})
-	f.cleanupId = registerCleanup(f.Close)
-
-	f.wg.Add(2)
-	go noPanicReRunVoid(base+"-log-handler", f.logWriter)
-	go noPanicReRunVoid(base+"-log-rotater", f.logRotater)
-	return nil
-}
-
-func (f *FileHandler) Close() error {
-	f.muFile.Lock()
-	defer f.muFile.Unlock()
-
-	ptr := f.filePtr.Load()
-	if ptr != nil {
-		_ = ptr.Close()
-		f.filePtr.Store(nil)
-	}
-
-	if f.release != nil {
-		f.release()
-		f.release = nil
-	}
-
-	return f.WriterHandler.Close()
-}
-
-func (f *FileHandler) logWriter() {
-	f.muFile.Lock()
-	if f.logCh == nil {
-		f.logCh = make(chan *LogMessage, 1<<10)
-	}
-	f.muFile.Unlock()
-
-	logfile, err := f.ensureLogFile()
-	if err != nil {
-		Error().Msgf("failed to open log file: %v", err)
-		f.wg.Done()
-		return
-	}
-	f.filePtr.Store(logfile)
-
-	for {
-		select {
-		case msg := <-f.logCh:
-			l := f.FormatLog(msg)
-			f.muFile.Lock()
-			_, err := f.filePtr.Load().WriteString(l)
-			f.muFile.Unlock()
-			releaseLogMessage(msg)
-
-			if err != nil {
-				Error().Msgf("failed to write to log file: %v", err).Send()
-				f.wg.Done()
-				return
+	f.BaseHandler = BaseHandler{
+		CancelPreFunc: func(ctx context.Context, lh LogHandler) error {
+			if f.release != nil {
+				if !f.release() {
+					return ErrSkipClose
+				}
+				f.release = nil
 			}
-		case <-f.closeCh:
-			f.wg.Done()
-			return
-		}
+			return nil
+		},
+		CloseFunc: func(ctx context.Context, lh LogHandler) error {
+			if f.onRelease != nil {
+				f.onRelease()
+			}
+			return nil
+		},
+		StartFunc: func(ctx context.Context, lh LogHandler) error {
+			_, base := f.getLogfileLocation()
+			if base == "." {
+				return ErrMissingLogFilename
+			}
+
+			logfile, err := f.ensureLogFile()
+			if err != nil {
+				return fmt.Errorf("failed to open log file: %w", err)
+			}
+			f.filePtr = logfile
+
+			return nil
+		},
+		HandleFunc: func(ctx context.Context, msg *LogMessage) error {
+			f.muFile.Lock()
+			defer f.muFile.Unlock()
+
+			if f.filePtr == nil {
+				panic("FileHandler: filePtr is nil")
+			}
+
+			_, err := f.filePtr.WriteString(msg.String(""))
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+		Subprocesses: []func(context.Context) error{f.logRotater},
 	}
+
+	return f
 }
 
-func (f *FileHandler) logRotater() {
-	f.mu.RLock()
-	if f.maxFileSize == 0 {
-		f.mu.RUnlock()
-		f.wg.Done()
-		return
-	}
-	f.mu.RUnlock()
-
+func (f *FileHandler) logRotater(ctx context.Context) error {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
 	for {
 		select {
+		case <-ctx.Done():
+			return nil
+
 		case <-ticker.C:
-			f.mu.RLock()
-			logPath := filepath.Join(f.logDir, f.logFilename)
-			f.mu.RUnlock()
+			maxFilesize := f.GetMaxFileSize()
+			if maxFilesize == 0 {
+				return nil
+			}
+
+			logDir, logFilename := f.GetLogfileLocation()
+			logPath := filepath.Join(logDir, logFilename)
+			rotatedName := fmt.Sprintf("%s-%s.gz", logFilename, time.Now().UTC().Format("2006-01-02_15-04-05"))
+			rotatedPath := filepath.Join(logDir, rotatedName)
 
 			info, err := os.Stat(logPath)
 			if err != nil {
 				if os.IsNotExist(err) {
-					if _, err := f.ensureLogFile(); err != nil {
-						Error().Msgf("failed to recreate missing log file, killing rotation: %v", err).Send()
-						f.wg.Done()
-						return
+					f.muFile.Lock()
+					_, err := f.ensureLogFile()
+					f.muFile.Unlock()
+
+					if err != nil {
+						return fmt.Errorf("failed to recreate missing log file, killing rotation: %w", err)
 					}
+
 					continue
 				}
 
-				Error().Msgf("failed to stat log file, killing rotation: %v", err).Send()
 				f.wg.Done()
-				return
+				return fmt.Errorf("failed to stat log file, killing rotation: %w", err)
 			}
 
-			if info.Size() <= f.maxFileSize {
+			if info.Size() <= maxFilesize {
 				continue
 			}
 
 			f.muFile.Lock()
-
-			rotatedName := fmt.Sprintf("%s-%s.gz", f.logFilename, time.Now().UTC().Format("2006-01-02_15-04-05"))
-			rotatedPath := filepath.Join(f.logDir, rotatedName)
-
 			original, err := os.Open(filepath.Clean(logPath))
 			if err != nil {
 				f.muFile.Unlock()
@@ -211,37 +219,43 @@ func (f *FileHandler) logRotater() {
 			}
 
 			f.muFile.Unlock()
-
-		case <-f.closeCh:
-			f.wg.Done()
-			return
 		}
 	}
+}
+
+func (f *FileHandler) getLogfileLocation() (dir, base string) {
+	return f.logDir, f.logFilename
 }
 
 func (f *FileHandler) GetLogfileLocation() (dir, base string) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.logDir, f.logFilename
+	return f.getLogfileLocation()
+}
+
+func (f *FileHandler) SetMaxFileSize(size int64) {
+	f.mu.Lock()
+	f.maxFileSize = size
+	f.mu.Unlock()
+}
+
+func (f *FileHandler) GetMaxFileSize() int64 {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.maxFileSize
 }
 
 func (f *FileHandler) SetLogfileLocation(dir, base string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	dir = filepath.Clean(dir)
-	base = filepath.Clean(strings.TrimSuffix(filepath.Base(base), ".log"))
-
-	if dir != "." && base == "." {
+	path := filepath.Join(dir, base)
+	if path == "." {
 		return ErrMissingLogFilename
 	}
-	if base != "." {
-		base += ".log"
-	}
+	path = strings.TrimSuffix(path, ".log") + ".log"
 
-	f.logDir = dir
-	f.logFilename = base
-
+	f.logDir, f.logFilename = filepath.Split(path)
 	return nil
 }
 
@@ -254,9 +268,6 @@ func (f *FileHandler) ensureLogDir() error {
 }
 
 func (f *FileHandler) ensureLogFile() (*os.File, error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
 	if f.logFilename == "." {
 		return nil, ErrNoLogFileConfigured
 	}
