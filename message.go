@@ -37,7 +37,19 @@ func NewLogMessage() *LogMessage {
 }
 
 func (lm *LogMessage) WithSend(send func(*LogMessage)) *LogMessage { lm.send = send; return lm }
-func (lm *LogMessage) Send()                                       { lm.send(lm) }
+func (lm *LogMessage) Send() {
+	if err := lm.SendE(); err != nil {
+		panic(err)
+	}
+}
+
+func (lm *LogMessage) SendE() error {
+	if lm.send == nil {
+		return fmt.Errorf("LogMessage.SendE: no send function set")
+	}
+	lm.send(lm)
+	return nil
+}
 
 func (lm *LogMessage) WithMeta(key string, value any) *LogMessage {
 	lm.Meta = append(lm.Meta, LogMessageMetaKV{K: key, V: fmt.Sprintf("%v", value)})
