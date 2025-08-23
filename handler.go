@@ -182,7 +182,6 @@ func (b *BaseHandler) logHandler(ready chan struct{}) {
 	for {
 		select {
 		case <-b.ctx.Done(): // drain
-			fmt.Fprintln(os.Stderr, "draining log handler")
 			for {
 				select {
 				case m := <-b.logCh:
