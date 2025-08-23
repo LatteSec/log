@@ -42,8 +42,8 @@ var (
 func init() {
 	go handleSigint()
 
-	DefaultStdoutHandler.Store(&WriterHandler{writer: os.Stdout})
-	DefaultStderrHandler.Store(&WriterHandler{writer: os.Stderr})
+	RegisterStdoutHandler(NewWriterHandler(os.Stdout))
+	RegisterStderrHandler(NewWriterHandler(os.Stderr))
 }
 
 func DefaultLogger() *Logger {
@@ -68,6 +68,22 @@ func DefaultLogger() *Logger {
 
 func Register(l *Logger) {
 	defaultLogger.Store(l)
+}
+
+func RegisterStdoutHandler(handler *WriterHandler) error {
+	if err := handler.Start(); err != nil && err != ErrAlreadyStarted {
+		return err
+	}
+	DefaultStdoutHandler.Store(handler)
+	return nil
+}
+
+func RegisterStderrHandler(handler *WriterHandler) error {
+	if err := handler.Start(); err != nil && err != ErrAlreadyStarted {
+		return err
+	}
+	DefaultStderrHandler.Store(handler)
+	return nil
 }
 
 func log(msg *LogMessage) {
