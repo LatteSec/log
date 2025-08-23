@@ -106,7 +106,7 @@ func (l *Logger) SendLog(msg *LogMessage) {
 		}
 	}
 
-	shouldWriteToStd := l.level < QUIET
+	shouldWriteToStd := l.level != QUIET
 	name := l.name
 	l.mu.RUnlock()
 
