@@ -42,8 +42,12 @@ var (
 func init() {
 	go handleSigint()
 
-	RegisterStdoutHandler(NewWriterHandler(os.Stdout))
-	RegisterStderrHandler(NewWriterHandler(os.Stderr))
+	if err := RegisterStdoutHandler(NewWriterHandler(os.Stdout)); err != nil {
+		panic(err)
+	}
+	if err := RegisterStderrHandler(NewWriterHandler(os.Stderr)); err != nil {
+		panic(err)
+	}
 }
 
 func DefaultLogger() *Logger {
