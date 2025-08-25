@@ -135,15 +135,16 @@ func (l *Logger) Error() *LogMessage { return NewLogMessage().Error().WithSend(l
 func (l *Logger) Fatal() *LogMessage {
 	return NewLogMessage().Fatal().WithSend(func(lm *LogMessage) {
 		l.SendLog(lm)
-		l.mu.RLock()
-		defer l.mu.RUnlock()
 
+		l.mu.RLock()
 		if l.cleanup != nil {
 			for _, cleanup := range l.cleanup {
 				cleanup()
 			}
 		}
+		l.mu.RUnlock()
 
+		runCleanup()
 		os.Exit(1)
 	})
 }

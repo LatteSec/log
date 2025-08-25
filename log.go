@@ -70,6 +70,10 @@ func DefaultLogger() *Logger {
 	return logger
 }
 
+func Sync() {
+	runCleanup()
+}
+
 func Register(l *Logger) {
 	defaultLogger.Store(l)
 }
