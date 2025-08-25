@@ -72,6 +72,7 @@ func (lm *LogMessage) WithCaller() *LogMessage {
 }
 
 func (lm *LogMessage) WithLevel(level Level) *LogMessage { lm.Level = level; return lm }
+func (lm *LogMessage) LevelString() string               { return levelNames[lm.Level] }
 
 func (lm *LogMessage) Msg(msg string) *LogMessage { lm.Message = msg; return lm }
 func (lm *LogMessage) Msgf(format string, v ...any) *LogMessage {
@@ -106,7 +107,7 @@ func (lm *LogMessage) String(loggerName string) string {
 
 	return strings.TrimSuffix(fmt.Sprintf("%s [%s] %s: %s%s%s",
 		lm.Timestamp.Format(time.RFC3339Nano),
-		levelNames[lm.Level],
+		lm.LevelString(),
 		loggerName,
 		strings.TrimSuffix(lm.Message, "\n"),
 		metaStr,
