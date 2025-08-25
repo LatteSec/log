@@ -70,6 +70,10 @@ func DefaultLogger() *Logger {
 	return logger
 }
 
+func Sync() {
+	runCleanup()
+}
+
 func Register(l *Logger) {
 	defaultLogger.Store(l)
 }
@@ -90,17 +94,9 @@ func RegisterStderrHandler(handler *WriterHandler) error {
 	return nil
 }
 
-func log(msg *LogMessage) {
-	DefaultLogger().SendLog(msg)
-}
-
-func newGLobalLogMessage() *LogMessage {
-	return NewLogMessage().WithSend(log)
-}
-
-func Log(level Level) *LogMessage { return newGLobalLogMessage().WithLevel(level) }
-func Debug() *LogMessage          { return newGLobalLogMessage().Debug() }
-func Info() *LogMessage           { return newGLobalLogMessage().Info() }
-func Warn() *LogMessage           { return newGLobalLogMessage().Warn() }
-func Error() *LogMessage          { return newGLobalLogMessage().Error() }
-func Fatal() *LogMessage          { return newGLobalLogMessage().Fatal() }
+func Log(level Level) *LogMessage { return DefaultLogger().Log(level) }
+func Debug() *LogMessage          { return DefaultLogger().Debug() }
+func Info() *LogMessage           { return DefaultLogger().Info() }
+func Warn() *LogMessage           { return DefaultLogger().Warn() }
+func Error() *LogMessage          { return DefaultLogger().Error() }
+func Fatal() *LogMessage          { return DefaultLogger().Fatal() }

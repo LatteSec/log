@@ -231,3 +231,15 @@ func NewWriterHandler(writer io.Writer) *WriterHandler {
 
 	return wr
 }
+
+func (wh *WriterHandler) Writer() io.Writer {
+	wh.mu.RLock()
+	defer wh.mu.RUnlock()
+	return wh.writer
+}
+
+func (wh *WriterHandler) SetWriter(writer io.Writer) {
+	wh.mu.Lock()
+	defer wh.mu.Unlock()
+	wh.writer = writer
+}
