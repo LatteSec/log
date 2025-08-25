@@ -84,7 +84,7 @@ func (lm *LogMessage) Debug() *LogMessage { return lm.WithLevel(DEBUG) }
 func (lm *LogMessage) Info() *LogMessage  { return lm.WithLevel(INFO) }
 func (lm *LogMessage) Warn() *LogMessage  { return lm.WithLevel(WARN) }
 func (lm *LogMessage) Error() *LogMessage { return lm.WithLevel(ERROR) }
-func (lm *LogMessage) Fatal() *LogMessage { return lm.WithLevel(ERROR).WithCaller().WithTraceStack() }
+func (lm *LogMessage) Fatal() *LogMessage { return lm.WithLevel(ERROR) }
 
 func (lm *LogMessage) String(loggerName string) string {
 	var metaStr string
