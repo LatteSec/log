@@ -54,7 +54,7 @@ func TestMultipleHandlers(t *testing.T) {
 func TestFileHandlerWritesToFile(t *testing.T) {
 	tmpfile, err := os.CreateTemp("", "logtest-*.log")
 	require.NoError(t, err)
-	defer os.Remove(tmpfile.Name())
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 	require.NoError(t, tmpfile.Close())
 
@@ -79,7 +79,7 @@ func TestFileHandlerWritesToFile(t *testing.T) {
 func TestClosingOneOfManyFileHandlersStillWorks(t *testing.T) {
 	tmpfile, err := os.CreateTemp("", "logtest-*.log")
 	require.NoError(t, err)
-	defer os.Remove(tmpfile.Name())
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 	require.NoError(t, tmpfile.Close())
 

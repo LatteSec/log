@@ -74,7 +74,7 @@ func (lm *LogMessage) WithCaller() *LogMessage {
 func (lm *LogMessage) WithLevel(level Level) *LogMessage { lm.Level = level; return lm }
 func (lm *LogMessage) LevelString() string               { return levelNames[lm.Level] }
 
-func (lm *LogMessage) Msg(msg string) *LogMessage { lm.Message = msg; return lm }
+func (lm *LogMessage) Msg(msg ...any) *LogMessage { lm.Message = fmt.Sprint(msg...); return lm }
 func (lm *LogMessage) Msgf(format string, v ...any) *LogMessage {
 	lm.Message = fmt.Sprintf(format, v...)
 	return lm
